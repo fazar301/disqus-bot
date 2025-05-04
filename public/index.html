@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disqus Vote Bot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2e9fff;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .vote-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .vote-button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .upvote-button {
+            background-color: #2e9fff;
+            color: white;
+        }
+        .upvote-button:hover {
+            background-color: #1a8fff;
+        }
+        .downvote-button {
+            background-color: #ff4d4d;
+            color: white;
+        }
+        .downvote-button:hover {
+            background-color: #ff3333;
+        }
+        .vote-button.active {
+            transform: scale(1.05);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        #disqus_thread {
+            margin-top: 20px;
+            min-height: 500px;
+        }
+    </style>
+    <!-- Disqus Configuration -->
+    <script>
+        var disqus_config = function () {
+            this.page.url = window.location.href;
+            this.page.identifier = 'disqus-bot';
+        };
+    </script>
+    <!-- Disqus Embed -->
+    <script id="dsq-count-scr" src="//disqus-bot.disqus.com/count.js" async></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Disqus Vote Bot</h1>
+        <form id="voteForm">
+            <div class="form-group">
+                <label for="commentId">Comment ID:</label>
+                <input type="text" id="commentId" name="commentId" required 
+                       placeholder="Enter Disqus comment ID">
+            </div>
+            <div class="vote-buttons">
+                <button type="button" class="vote-button upvote-button" data-vote-type="upvote">Upvote</button>
+                <button type="button" class="vote-button downvote-button" data-vote-type="downvote">Downvote</button>
+            </div>
+            <div class="form-group">
+                <label for="voteCount">Number of Votes:</label>
+                <input type="number" id="voteCount" name="voteCount" required 
+                       min="1" max="100" value="1">
+            </div>
+            <button type="submit" class="vote-button" id="submitButton">Start Voting</button>
+        </form>
+        <div id="status"></div>
+        <div id="disqus_thread"></div>
+    </div>
+
+    <script>
+        // Disqus embed code
+        (function() {
+            var d = document, s = d.createElement('script');
+            s.src = 'https://disqus-bot.disqus.com/embed.js';
+            s.setAttribute('data-timestamp', +new Date());
+            (d.head || d.body).appendChild(s);
+        })();
+
+        let selectedVoteType = 'upvote'; // Default vote type
+
+        // Handle vote type selection
+        document.querySelectorAll('.vote-button[data-vote-type]').forEach(button => {
+            button.addEventListener('click', () => {
+                // Remove active class from all buttons
+                document.querySelectorAll('.vote-button[data-vote-type]').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                
+                // Add active class to clicked button
+                button.classList.add('active');
+                
+                // Update selected vote type
+                selectedVoteType = button.dataset.voteType;
+                
+                // Update submit button color
+                const submitButton = document.getElementById('submitButton');
+                submitButton.className = `vote-button ${selectedVoteType}-button`;
+            });
+        });
+
+        // Set default active button
+        document.querySelector('.upvote-button').classList.add('active');
+
+        document.getElementById('voteForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const statusDiv = document.getElementById('status');
+            const commentId = document.getElementById('commentId').value;
+            const voteCount = document.getElementById('voteCount').value;
+            
+            statusDiv.style.display = 'block';
+            statusDiv.className = '';
+            statusDiv.textContent = 'Processing...';
+            
+            try {
+                const response = await fetch('/vote', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        commentId,
+                        voteCount: parseInt(voteCount),
+                        voteType: selectedVoteType
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    statusDiv.className = 'success';
+                    let message = data.message;
+                    if (data.errors && data.errors.length > 0) {
+                        message += `\nSome attempts failed: ${data.errors.join(', ')}`;
+                    }
+                    statusDiv.textContent = message;
+                } else {
+                    let errorMessage = data.error;
+                    if (data.details) {
+                        if (typeof data.details === 'object') {
+                            errorMessage += '\nDetails: ' + JSON.stringify(data.details, null, 2);
+                        } else {
+                            errorMessage += '\nDetails: ' + data.details;
+                        }
+                    }
+                    throw new Error(errorMessage);
+                }
+            } catch (error) {
+                statusDiv.className = 'error';
+                statusDiv.textContent = error.message;
+            }
+        });
+    </script>
+</body>
+</html> 
